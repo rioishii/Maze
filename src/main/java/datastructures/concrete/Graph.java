@@ -1,6 +1,5 @@
 package datastructures.concrete;
 
-import com.sun.javafx.geom.Edge;
 import datastructures.concrete.dictionaries.ChainedHashDictionary;
 import datastructures.interfaces.IDictionary;
 import datastructures.interfaces.IEdge;
@@ -10,7 +9,6 @@ import datastructures.interfaces.IDisjointSet;
 import datastructures.interfaces.IPriorityQueue;
 import misc.Sorter;
 import misc.exceptions.NoPathExistsException;
-import sun.security.provider.certpath.Vertex;
 
 /**
  * Represents an undirected, weighted graph, possibly containing self-loops, parallel edges,
@@ -191,18 +189,112 @@ public class Graph<V, E extends IEdge<V> & Comparable<E>> {
             return new DoubleLinkedList<>();
         }
 
-        
+        IList<E> result = new DoubleLinkedList<>();
+        IDictionary<V, Vertex> allVertices = new ChainedHashDictionary<>();
+        ISet<V> unprocessed = new ChainedHashSet<>();
+
+        // make all vertices weight equal to infinity
+        for (V vertex : this.vertices) {
+            Vertex comparableVertex = new Vertex(vertex, Double.POSITIVE_INFINITY);
+            allVertices.put(vertex, comparableVertex);
+            unprocessed.add(vertex);
+        }
+
+        Vertex sourceVertex = new Vertex(start, 0.0);
+        allVertices.put(start, sourceVertex);
+
+        // initialize MPQ with source as the first thing inside of it
+        IPriorityQueue<Vertex> minPriorityQueue = new ArrayHeap<>();
+        minPriorityQueue.insert(allVertices.get(start));
+        boolean foundPath = false;
+        Vertex v = null; // last vertex we put a predecessor on
+
+        while (!minPriorityQueue.isEmpty() && !foundPath) {
+            Vertex u = minPriorityQueue.removeMin();
+
+            if (unprocessed.contains(u.getValue())) {
+                if (u.getValue() == end) {
+                    if (v.getValue() != start || v.getValue() != end) {
+                        v = u;
+                    }
+
+                    foundPath = true;
+                    break;
+                }
+
+                // reached the end of the stuff we want in our stack
+                if (u.getDist() == Double.POSITIVE_INFINITY) {
+                    while (!minPriorityQueue.isEmpty()) {
+                        minPriorityQueue.removeMin();
+                    }
+                }
+
+                for (E edge : adjacencyList.get(u.getValue())) {
+                    V otherVertex = edge.getOtherVertex(u.getValue());
+                    if (unprocessed.contains(otherVertex)) {
+                        v = allVertices.get(otherVertex);
+                        double oldDist = v.getDist();
+                        double newDist = u.getDist() + edge.getWeight();
+
+                        if (newDist < oldDist) {
+                            v.setDist(newDist);
+                            v.setPredecessor(u);
+                            minPriorityQueue.insert(v);
+                        }
+                    }
+                }
+
+                unprocessed.remove(u.getValue());
+            }
+        }
+
+        if (!foundPath) {
+            throw new NoPathExistsException();
+        }
+
+        while (v.getPredecessor() != null) {
+            for (E edge : adjacencyList.get(v.getValue())) {
+                V otherVertex = edge.getOtherVertex(v.getValue());
+                if (otherVertex == v.getPredecessor().getValue()) {
+                    result.insert(0, edge);
+                    v = v.getPredecessor();
+                    break;
+                }
+            }
+        }
+
+        return result;
     }
 
     // Custom class to keep track of weights in vertex
-    private class Path implements Comparable<Path> {
-        private Vertex v;
+    private class Vertex implements Comparable<Vertex> {
+        private V value;
         private double dist;
-        private IList<Edge> path;
+        private Vertex predecessor;
 
-        Path(V value, double dist) {
-            this.v = v;
+        Vertex(V value, double dist) {
+            this.value = value;
             this.dist = dist;
+        }
+
+        V getValue() {
+            return this.value;
+        }
+
+        double getDist() {
+            return this.dist;
+        }
+
+        void setDist(double dist) {
+            this.dist = dist;
+        }
+
+        void setPredecessor(Vertex predecessor) {
+            this.predecessor = predecessor;
+        }
+
+        Vertex getPredecessor() {
+            return this.predecessor;
         }
 
         @Override
